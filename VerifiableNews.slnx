@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VerifiableNews.App/VerifiableNews.App.csproj" />
+  </Folder>
+</Solution>
