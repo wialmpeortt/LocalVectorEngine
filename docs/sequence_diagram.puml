@@ -1,0 +1,63 @@
+@startuml SequenceDiagram_VerifiableNews
+
+skinparam backgroundColor white
+skinparam sequenceArrowThickness 2
+skinparam sequenceParticipant {
+    BackgroundColor #EEF2FF
+    BorderColor #3B4A9C
+}
+skinparam sequenceActorBackgroundColor #EEF2FF
+skinparam sequenceActorBorderColor #3B4A9C
+skinparam sequenceLifeLineBorderColor #3B4A9C
+skinparam sequenceMessageAlign center
+skinparam noteBorderColor #3B4A9C
+skinparam noteBackgroundColor #FFF9E6
+
+title Verifiable News - UML Sequence Diagram\nArticle Verification Flow
+
+actor User
+participant "VerificationEngine" as VE
+participant "OllamaLLMService\n(ILLMService)" as LLM
+participant "OnnxEmbeddingService\n(IEmbeddingService)" as EMB
+participant "BLiteVectorStore\n(IVectorStore)" as DB
+
+' ─── Phase 1: Claim Atomization ───────────────────────────
+User -> VE : VerifyArticle(newsArticle)
+activate VE
+
+note over VE : Phase 1 - Claim Atomization
+
+VE -> LLM : ExtractClaims(article.Content)
+activate LLM
+LLM --> VE : List<AtomicClaim> [JSON array]
+deactivate LLM
+
+note over VE : Phase 2 - Embedding Claims
+
+' ─── Phase 2: Embedding each claim ───────────────────────
+loop for each AtomicClaim
+    VE -> EMB : GenerateEmbedding(claim.Text)
+    activate EMB
+    EMB --> VE : float[] embeddingVector
+    deactivate EMB
+    VE -> VE : claim.EmbeddingVector = vector
+end
+
+' ─── Phase 3: Vector Search ────────────────────────────────
+note over VE : Phase 3 - Vector Similarity Search (HNSW)
+
+loop for each AtomicClaim
+    VE -> DB : SearchAsync(claim.EmbeddingVector, topK=5)
+    activate DB
+    DB --> VE : List<DocumentChunk> (top-K matches)
+    deactivate DB
+    VE -> VE : Build ClaimVerificationResult
+end
+
+' ─── Return Results ────────────────────────────────────────
+VE --> User : List<ClaimVerificationResult>
+deactivate VE
+
+note over User : Each result links a claim\nto its supporting evidence
+
+@enduml
