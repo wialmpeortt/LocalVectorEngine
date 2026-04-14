@@ -46,8 +46,8 @@ public sealed class OnnxEmbeddingService : IEmbeddingService, IDisposable
         _session = new InferenceSession(onnxModelPath);
 
         _tokenizer = new BertTokenizer();
-        using var vocabStream = File.OpenRead(vocabPath);
-        _tokenizer.LoadVocabulary(vocabStream, convertInputToLowercase: lowerCase);
+        using var vocabReader = new StreamReader(vocabPath);
+        _tokenizer.LoadVocabulary(vocabReader, convertInputToLowercase: lowerCase);
     }
 
     /// <inheritdoc />
@@ -65,32 +65,32 @@ public sealed class OnnxEmbeddingService : IEmbeddingService, IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        // 1. Tokenize. FastBertTokenizer pads/truncates to MaxSequenceLength.
-        var (inputIds, attentionMask, tokenTypeIds) =
+        // 1. Tokenize. FastBertTokenizer pads/truncates to MaxSequenceLength
+        //    and returns Memory<long> for the three BERT inputs.
+        var (inputIdsMem, attentionMaskMem, tokenTypeIdsMem) =
             _tokenizer.Encode(text, MaxSequenceLength);
+
+        long[] inputIds      = inputIdsMem.ToArray();
+        long[] attentionMask = attentionMaskMem.ToArray();
+        long[] tokenTypeIds  = tokenTypeIdsMem.ToArray();
         ct.ThrowIfCancellationRequested();
 
         int seqLen = inputIds.Length;
         var shape = new[] { 1, seqLen };
 
         // 2. Run the model.
-        using var inputIdsTensor = OrtValue.CreateTensorValueFromMemory(inputIds, shape);
-        using var attentionMaskTensor = OrtValue.CreateTensorValueFromMemory(attentionMask, shape);
-        using var tokenTypeIdsTensor = OrtValue.CreateTensorValueFromMemory(tokenTypeIds, shape);
-
-        var inputs = new Dictionary<string, OrtValue>
+        var inputs = new List<NamedOnnxValue>
         {
-            ["input_ids"]      = inputIdsTensor,
-            ["attention_mask"] = attentionMaskTensor,
-            ["token_type_ids"] = tokenTypeIdsTensor,
+            NamedOnnxValue.CreateFromTensor("input_ids",      new DenseTensor<long>(inputIds,      shape)),
+            NamedOnnxValue.CreateFromTensor("attention_mask", new DenseTensor<long>(attentionMask, shape)),
+            NamedOnnxValue.CreateFromTensor("token_type_ids", new DenseTensor<long>(tokenTypeIds,  shape)),
         };
 
-        using var runOptions = new RunOptions();
-        using var results = _session.Run(runOptions, inputs, _session.OutputNames);
+        using var results = _session.Run(inputs);
         ct.ThrowIfCancellationRequested();
 
         // The first output is `last_hidden_state` with shape [1, seqLen, 384].
-        var lastHidden = results[0].GetTensorDataAsSpan<float>();
+        var lastHiddenTensor = results.First().AsTensor<float>();
 
         // 3. Mean pool with the attention mask.
         var pooled = new float[EmbeddingDimension];
@@ -99,9 +99,8 @@ public sealed class OnnxEmbeddingService : IEmbeddingService, IDisposable
         {
             if (attentionMask[t] == 0) continue;
             validTokens++;
-            int tokenOffset = t * EmbeddingDimension;
             for (int d = 0; d < EmbeddingDimension; d++)
-                pooled[d] += lastHidden[tokenOffset + d];
+                pooled[d] += lastHiddenTensor[0, t, d];
         }
         if (validTokens == 0)
             throw new InvalidOperationException("Input produced zero valid tokens after tokenization.");
