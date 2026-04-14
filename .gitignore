@@ -480,4 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
-models/
+
+# ONNX / ML model binaries (root-level models/ folder only — do NOT ignore C# Models/ namespaces)
+/models/

@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/VerifiableNews.App/VerifiableNews.App.csproj" />
+    <Project Path="src/LocalVectorEngine.Core/LocalVectorEngine.Core.csproj" />
+    <Project Path="src/LocalVectorEngine.Demo/LocalVectorEngine.Demo.csproj" />
   </Folder>
 </Solution>
