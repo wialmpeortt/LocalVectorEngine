@@ -104,10 +104,10 @@ No cloud calls — all retrieval runs on-device.
 
 | Component | Interface | Implementation |
 |---|---|---|
-| Chunking | ✅ `IChunkingService` | ⏳ Issue #21 |
-| Embedding | ✅ `IEmbeddingService` | ⏳ Issue #10 — `OnnxEmbeddingService` |
-| Vector store | ✅ `IVectorStore` | ⏳ Issue #11 — `BLiteVectorStore` |
-| Demo console | — | ⏳ end-to-end pipeline |
+| Chunking | ✅ `IChunkingService` | ✅ `SlidingWindowChunkingService` (Issue #21) |
+| Embedding | ✅ `IEmbeddingService` | ✅ `OnnxEmbeddingService` (Issue #10) |
+| Vector store | ✅ `IVectorStore` | ✅ `BLiteVectorStore` (Issue #11) |
+| Demo console | — | ⏳ end-to-end pipeline (Issue #13) |
 
 ## How to run
 
@@ -152,6 +152,14 @@ Exam/
 
 ## Project documentation
 
-- `docs/class_diagram.puml` — class diagram (Core + planned implementations)
-- `docs/sequence_diagram.puml` — sequence diagrams of the indexing and query flows
-- The Kanban board on GitHub Projects tracks sprint-by-sprint progress.
+### Class diagram
+
+![Class diagram](docs/ClassDiagram_LocalVectorEngine.png)
+
+### Sequence diagram (RAG pipeline)
+
+![Sequence diagram](docs/SequenceDiagram_LocalVectorEngine.png)
+
+Sources: [`docs/class_diagram.puml`](docs/class_diagram.puml), [`docs/sequence_diagram.puml`](docs/sequence_diagram.puml).
+
+The Kanban board on GitHub Projects tracks sprint-by-sprint progress.

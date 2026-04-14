@@ -19,74 +19,107 @@ title LocalVectorEngine — UML Class Diagram\nCore library + Demo host
 package "LocalVectorEngine.Core" as Core {
 
     ' ─── Models ──────────────────────────────────────────
-    class "DocumentChunk\n<<record>>" as DocumentChunk {
-        + DocumentId : string
-        + ChunkIndex : int
-        + Text : string
-        + Source : string
-    }
+    package "Models" as Models {
+        class "DocumentChunk\n<<record>>" as DocumentChunk {
+            + DocumentId : string
+            + ChunkIndex : int
+            + Text : string
+            + Source : string
+        }
 
-    class "SearchResult\n<<record>>" as SearchResult {
-        + Chunk : DocumentChunk
-        + Score : float
+        class "SearchResult\n<<record>>" as SearchResult {
+            + Chunk : DocumentChunk
+            + Score : float
+        }
     }
 
     ' ─── Interfaces ──────────────────────────────────────
-    interface IChunkingService {
-        + Chunk(documentId: string, text: string, source: string) : IEnumerable<DocumentChunk>
+    package "Interfaces" as Interfaces {
+        interface IChunkingService {
+            + Chunk(documentId, text, source) : IEnumerable<DocumentChunk>
+        }
+
+        interface IEmbeddingService {
+            + EmbedAsync(text, ct) : Task<float[]>
+        }
+
+        interface IVectorStore {
+            + StoreChunkAsync(chunk, embedding, ct) : Task
+            + SearchAsync(queryEmbedding, topK, ct) : Task<IReadOnlyList<SearchResult>>
+        }
     }
 
-    interface IEmbeddingService {
-        + EmbedAsync(text: string, ct: CancellationToken) : Task<float[]>
+    ' ─── Services (concrete implementations) ─────────────
+    package "Services" as Services {
+        class SlidingWindowChunkingService {
+            + {static} DefaultChunkSizeWords : int = 400
+            + {static} DefaultOverlapWords   : int = 50
+            - _chunkSize : int
+            - _overlap   : int
+            - _step      : int
+            + Chunk(documentId, text, source) : IEnumerable<DocumentChunk>
+        }
+
+        class OnnxEmbeddingService {
+            + {static} EmbeddingDimension : int = 384
+            + {static} MaxSequenceLength  : int = 512
+            - _session   : InferenceSession
+            - _tokenizer : BertTokenizer
+            + EmbedAsync(text, ct) : Task<float[]>
+            + Dispose()
+        }
+
+        class BLiteVectorStore {
+            + {static} EmbeddingDimension : int = 384
+            - _db         : VectorStoreDbContext
+            - _writeLock  : SemaphoreSlim
+            + StoreChunkAsync(chunk, embedding, ct) : Task
+            + SearchAsync(queryEmbedding, topK, ct) : Task<IReadOnlyList<SearchResult>>
+            + Dispose()
+        }
     }
 
-    interface IVectorStore {
-        + StoreChunkAsync(chunk: DocumentChunk, embedding: float[], ct: CancellationToken) : Task
-        + SearchAsync(queryEmbedding: float[], topK: int, ct: CancellationToken) : Task<IReadOnlyList<SearchResult>>
-    }
-}
+    ' ─── Persistence (BLite mapping) ─────────────────────
+    package "Persistence" as Persistence {
+        class VectorChunkEntity {
+            + Id          : ObjectId
+            + DocumentId  : string
+            + ChunkIndex  : int
+            + Text        : string
+            + Source      : string
+            + Embedding   : float[]
+        }
 
-' ─── Planned implementations ─────────────────────────────
-package "LocalVectorEngine.Core (implementations)" as Impl {
-
-    class "SlidingWindowChunkingService\n<<planned — Issue #21>>" as ChunkImpl #FFF9E6 {
-        - chunkSize : int
-        - overlap : int
-        + Chunk(..) : IEnumerable<DocumentChunk>
-    }
-
-    class "OnnxEmbeddingService\n<<planned — Issue #10>>" as OnnxImpl #FFF9E6 {
-        - modelPath : string
-        - session : InferenceSession
-        + EmbedAsync(text, ct) : Task<float[]>
-    }
-
-    class "BLiteVectorStore\n<<planned — Issue #11>>" as BLiteImpl #FFF9E6 {
-        - dbPath : string
-        - collection : Collection
-        + StoreChunkAsync(..) : Task
-        + SearchAsync(..) : Task<IReadOnlyList<SearchResult>>
+        class VectorStoreDbContext {
+            + {static} EmbeddingDimension : int = 384
+            + {static} VectorIndexName    : string = "idx_chunk_embedding"
+            + Chunks : DocumentCollection<ObjectId, VectorChunkEntity>
+            # OnModelCreating(ModelBuilder)
+        }
     }
 }
 
 ' ─── Demo host ──────────────────────────────────────────
 package "LocalVectorEngine.Demo" as Demo {
     class Program {
-        + Main(args: string[]) : Task
+        + Main(args) : Task
     }
 }
 
 ' ─── Relationships ──────────────────────────────────────
 SearchResult --> DocumentChunk : wraps >
 
-ChunkImpl ..|> IChunkingService
-OnnxImpl  ..|> IEmbeddingService
-BLiteImpl ..|> IVectorStore
+SlidingWindowChunkingService ..|> IChunkingService
+OnnxEmbeddingService         ..|> IEmbeddingService
+BLiteVectorStore             ..|> IVectorStore
 
 IChunkingService  ..> DocumentChunk : produces >
-IEmbeddingService ..> "float[]"      : produces >
-IVectorStore      ..> DocumentChunk  : persists >
-IVectorStore      ..> SearchResult   : returns >
+IEmbeddingService ..> "float[]"     : produces >
+IVectorStore      ..> DocumentChunk : persists >
+IVectorStore      ..> SearchResult  : returns >
+
+BLiteVectorStore     --> VectorStoreDbContext : owns >
+VectorStoreDbContext --> VectorChunkEntity    : stores >
 
 Program --> IChunkingService  : uses
 Program --> IEmbeddingService : uses

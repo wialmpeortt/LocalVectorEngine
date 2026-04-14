@@ -17,9 +17,10 @@ title LocalVectorEngine — UML Sequence Diagram\nRAG pipeline: Indexing (once) 
 
 actor User
 participant "Program\n(Demo host)" as P
-participant "IChunkingService" as CHK
-participant "IEmbeddingService" as EMB
-participant "IVectorStore\n(BLite HNSW)" as DB
+participant "SlidingWindowChunkingService" as CHK
+participant "OnnxEmbeddingService" as EMB
+participant "BLiteVectorStore" as STORE
+database    "BLite file\n(HNSW index, cosine,\n384-dim)" as DB
 
 ' ═════════════════════════════════════════════════════════
 ' PHASE 1 — INDEXING (run once per document)
@@ -33,19 +34,28 @@ P -> P : text = File.ReadAllText(path)
 
 P -> CHK : Chunk(documentId, text, source)
 activate CHK
+note right of CHK
+  Sliding window over words
+  (default: 400 words / 50 overlap).
+  Emits DocumentChunk records
+  with sequential ChunkIndex.
+end note
 CHK --> P : IEnumerable<DocumentChunk>
 deactivate CHK
 
 loop for each chunk
     P -> EMB : EmbedAsync(chunk.Text, ct)
     activate EMB
-    EMB --> P : float[] embedding (384 dims)
+    EMB -> EMB : 1. BERT WordPiece tokenize\n2. ONNX forward pass\n3. mean-pool (attention mask)\n4. L2 normalize
+    EMB --> P : float[384]
     deactivate EMB
 
-    P -> DB : StoreChunkAsync(chunk, embedding, ct)
-    activate DB
-    DB --> P : (stored + HNSW updated)
-    deactivate DB
+    P -> STORE : StoreChunkAsync(chunk, embedding, ct)
+    activate STORE
+    STORE -> DB : InsertAsync(VectorChunkEntity)
+    DB --> STORE : (HNSW updated, BSON page written)
+    STORE --> P : (ok)
+    deactivate STORE
 end
 
 P --> User : N chunks indexed
@@ -66,19 +76,25 @@ activate P
 
 P -> EMB : EmbedAsync(question, ct)
 activate EMB
-EMB --> P : float[] queryVector (384 dims)
+EMB --> P : float[384] (L2-normalized)
 deactivate EMB
 
-P -> DB : SearchAsync(queryVector, topK=5, ct)
-activate DB
-note right of DB
-    HNSW approximate nearest-neighbor search
-    over all stored embeddings — O(log N).
-end note
-DB --> P : IReadOnlyList<SearchResult>\n(chunk + similarity score)
-deactivate DB
+P -> STORE : SearchAsync(queryEmbedding, topK=5, ct)
+activate STORE
 
-P --> User : Top-K passages + citations
+STORE -> DB : KNN over Embedding VectorSearch(query, k)
+note right of DB
+  HNSW approximate nearest-neighbor
+  search over all stored embeddings — O(log N).
+end note
+DB --> STORE : IList<VectorChunkEntity>\n(ordered by similarity)
+
+STORE -> STORE : recompute cosine score\n= dot(query, embedding)\n(vectors are already L2-normalized)
+
+STORE --> P : IReadOnlyList<SearchResult>\n(chunk + score in [-1,1])
+deactivate STORE
+
+P --> User : Top-K passages + scores
 deactivate P
 
 note over User, DB #F8F9FF
