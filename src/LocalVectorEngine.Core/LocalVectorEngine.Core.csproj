@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="BLite" Version="4.3.0" />
+    <PackageReference Include="FastBertTokenizer" Version="1.0.28" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.24.4" />
   </ItemGroup>
 

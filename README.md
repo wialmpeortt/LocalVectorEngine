@@ -111,15 +111,32 @@ No cloud calls — all retrieval runs on-device.
 
 ## How to run
 
+Download the ONNX model **and** its tokenizer vocabulary into `models/` (both are gitignored):
+
 ```bash
-# Build
+# 86 MB ONNX model
+curl -L -o models/all-MiniLM-L6-v2.onnx \
+  https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/onnx/model.onnx
+
+# 232 KB BERT WordPiece vocabulary
+curl -L -o models/vocab.txt \
+  https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2/resolve/main/vocab.txt
+```
+
+Then:
+
+```bash
+# Build everything (library + demo + tests)
 dotnet build
 
 # Run the console demo
 dotnet run --project src/LocalVectorEngine.Demo
+
+# Run the test suite (model-dependent tests auto-skip if models/ is empty)
+dotnet test
 ```
 
-The `all-MiniLM-L6-v2.onnx` model must be downloaded into `models/` (gitignored because of its size: 86 MB).
+Paths can be overridden via the `LVE_MODEL_PATH` and `LVE_VOCAB_PATH` environment variables.
 
 ## Repository layout
 

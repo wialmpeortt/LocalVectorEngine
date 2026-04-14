@@ -3,4 +3,7 @@
     <Project Path="src/LocalVectorEngine.Core/LocalVectorEngine.Core.csproj" />
     <Project Path="src/LocalVectorEngine.Demo/LocalVectorEngine.Demo.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LocalVectorEngine.Core.Tests/LocalVectorEngine.Core.Tests.csproj" />
+  </Folder>
 </Solution>
